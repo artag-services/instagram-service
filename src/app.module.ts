@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
 import { InstagramModule } from './instagram/instagram.module';
+import { ConversationsModule } from './conversations/conversations.module';
 import { WebhookModule } from './webhook/webhook.module';
 
 @Module({
@@ -11,6 +12,7 @@ import { WebhookModule } from './webhook/webhook.module';
     PrismaModule,
     RabbitMQModule,
     InstagramModule,
+    ConversationsModule,
     WebhookModule,
   ],
 })
