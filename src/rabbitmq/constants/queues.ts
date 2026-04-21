@@ -16,8 +16,11 @@ export const ROUTING_KEYS = {
   INSTAGRAM_OPTIN_RECEIVED: 'channels.instagram.events.optin',
   INSTAGRAM_HANDOVER_RECEIVED: 'channels.instagram.events.handover',
 
-  // Identity Service
-  IDENTITY_RESOLVE: 'channels.identity.resolve',
+  // Conversation Rooms System
+  CONVERSATION_INCOMING: 'channels.conversation.incoming',
+  CONVERSATION_CREATED: 'channels.conversation.created',
+  CONVERSATION_AI_TOGGLE: 'channels.conversation.ai-toggle',
+  CONVERSATION_AGENT_ASSIGN: 'channels.conversation.agent-assign',
 } as const;
 
 export const QUEUES = {
@@ -36,6 +39,12 @@ export const QUEUES = {
   INSTAGRAM_AI_RESPONSE: 'instagram.ai-response',
   INSTAGRAM_AI_RESPONSE_CHUNK_FAILED: 'instagram.ai-response-chunk-failed',
   INSTAGRAM_AI_RESPONSE_DLQ: 'instagram.ai-response-dlq',
+
+  // Conversation Queues
+  CONVERSATION_INCOMING: 'instagram.conversation.incoming',
+  CONVERSATION_CREATED: 'instagram.conversation.created',
+  CONVERSATION_AI_TOGGLE: 'instagram.conversation.ai-toggle',
+  CONVERSATION_AGENT_ASSIGN: 'instagram.conversation.agent-assign',
 
   GATEWAY_RESPONSES: 'gateway.responses',
 } as const;

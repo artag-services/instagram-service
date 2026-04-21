@@ -1,0 +1,37 @@
+export declare const RABBITMQ_EXCHANGE = "channels";
+export declare const ROUTING_KEYS: {
+    readonly INSTAGRAM_SEND: "channels.instagram.send";
+    readonly INSTAGRAM_RESPONSE: "channels.instagram.response";
+    readonly INSTAGRAM_AI_RESPONSE: "channels.instagram.ai-response";
+    readonly INSTAGRAM_AI_RESPONSE_CHUNK_FAILED: "channels.instagram.ai-response-chunk-failed";
+    readonly INSTAGRAM_AI_RESPONSE_DLQ: "channels.instagram.ai-response-dlq";
+    readonly INSTAGRAM_MESSAGE_RECEIVED: "channels.instagram.events.message";
+    readonly INSTAGRAM_COMMENT_RECEIVED: "channels.instagram.events.comment";
+    readonly INSTAGRAM_REACTION_RECEIVED: "channels.instagram.events.reaction";
+    readonly INSTAGRAM_SEEN_RECEIVED: "channels.instagram.events.seen";
+    readonly INSTAGRAM_REFERRAL_RECEIVED: "channels.instagram.events.referral";
+    readonly INSTAGRAM_OPTIN_RECEIVED: "channels.instagram.events.optin";
+    readonly INSTAGRAM_HANDOVER_RECEIVED: "channels.instagram.events.handover";
+    readonly CONVERSATION_INCOMING: "channels.conversation.incoming";
+    readonly CONVERSATION_CREATED: "channels.conversation.created";
+    readonly CONVERSATION_AI_TOGGLE: "channels.conversation.ai-toggle";
+    readonly CONVERSATION_AGENT_ASSIGN: "channels.conversation.agent-assign";
+};
+export declare const QUEUES: {
+    readonly INSTAGRAM_SEND: "instagram.send";
+    readonly INSTAGRAM_EVENTS_MESSAGE: "instagram.events.message";
+    readonly INSTAGRAM_EVENTS_COMMENT: "instagram.events.comment";
+    readonly INSTAGRAM_EVENTS_REACTION: "instagram.events.reaction";
+    readonly INSTAGRAM_EVENTS_SEEN: "instagram.events.seen";
+    readonly INSTAGRAM_EVENTS_REFERRAL: "instagram.events.referral";
+    readonly INSTAGRAM_EVENTS_OPTIN: "instagram.events.optin";
+    readonly INSTAGRAM_EVENTS_HANDOVER: "instagram.events.handover";
+    readonly INSTAGRAM_AI_RESPONSE: "instagram.ai-response";
+    readonly INSTAGRAM_AI_RESPONSE_CHUNK_FAILED: "instagram.ai-response-chunk-failed";
+    readonly INSTAGRAM_AI_RESPONSE_DLQ: "instagram.ai-response-dlq";
+    readonly CONVERSATION_INCOMING: "instagram.conversation.incoming";
+    readonly CONVERSATION_CREATED: "instagram.conversation.created";
+    readonly CONVERSATION_AI_TOGGLE: "instagram.conversation.ai-toggle";
+    readonly CONVERSATION_AGENT_ASSIGN: "instagram.conversation.agent-assign";
+    readonly GATEWAY_RESPONSES: "gateway.responses";
+};
