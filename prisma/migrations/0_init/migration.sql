@@ -19,6 +19,20 @@ EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
+-- CreateEnum: ConvStatus
+DO $$ BEGIN
+    CREATE TYPE "ConvStatus" AS ENUM ('ACTIVE', 'WAITING_AGENT', 'WITH_AGENT', 'ARCHIVED', 'CLOSED');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+-- CreateEnum: MessageSender
+DO $$ BEGIN
+    CREATE TYPE "MessageSender" AS ENUM ('USER', 'BOT', 'AGENT', 'SYSTEM');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
 -- CreateUser
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
@@ -130,11 +144,65 @@ CREATE TABLE "AIResponseChunk" (
 CREATE TABLE "N8NRateLimit" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
-    "callsToday" INT NOT NULL DEFAULT 0,
-    "resetAt" TIMESTAMP(3) NOT NULL,
+    "service" TEXT NOT NULL,
+    "date" DATE NOT NULL,
+    "callCount" INT NOT NULL DEFAULT 0,
+    "maxCalls" INT NOT NULL DEFAULT 20,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "N8NRateLimit_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateConversation
+CREATE TABLE "Conversation" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT,
+    "channelUserId" TEXT NOT NULL,
+    "channel" TEXT NOT NULL DEFAULT 'instagram',
+    "topic" TEXT,
+    "detectionMethod" TEXT NOT NULL,
+    "keywords" TEXT[],
+    "aiEnabled" Boolean NOT NULL DEFAULT true,
+    "agentAssigned" TEXT,
+    "status" "ConvStatus" NOT NULL DEFAULT 'ACTIVE',
+    "messageCount" INT NOT NULL DEFAULT 0,
+    "aiMessageCount" INT NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "lastMessageAt" TIMESTAMP(3),
+    "archivedAt" TIMESTAMP(3),
+    CONSTRAINT "Conversation_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateConversationMessage
+CREATE TABLE "ConversationMessage" (
+    "id" TEXT NOT NULL,
+    "conversationId" TEXT NOT NULL,
+    "sender" "MessageSender" NOT NULL,
+    "content" TEXT NOT NULL,
+    "mediaUrl" TEXT,
+    "aiGenerated" Boolean NOT NULL DEFAULT false,
+    "externalId" TEXT,
+    "metadata" JSONB,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "ConversationMessage_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateConversationAIResponse
+CREATE TABLE "ConversationAIResponse" (
+    "id" TEXT NOT NULL,
+    "conversationId" TEXT NOT NULL,
+    "userMessage" TEXT NOT NULL,
+    "aiResponse" TEXT NOT NULL,
+    "model" TEXT,
+    "confidence" Double precision,
+    "processingTime" INT,
+    "status" "AIResponseStatus" NOT NULL DEFAULT 'PENDING',
+    "chunks" INT NOT NULL DEFAULT 0,
+    "failureReason" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "ConversationAIResponse_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex: User.realName
@@ -200,11 +268,35 @@ CREATE INDEX "AIResponseChunk_aiResponseId_idx" ON "AIResponseChunk" ("aiRespons
 -- CreateIndex: AIResponseChunk.status
 CREATE INDEX "AIResponseChunk_status_idx" ON "AIResponseChunk" ("status");
 
--- CreateIndex: N8NRateLimit.userId
-CREATE UNIQUE INDEX "N8NRateLimit_userId_key" ON "N8NRateLimit" ("userId");
+-- CreateIndex: N8NRateLimit.userId_service_date
+CREATE UNIQUE INDEX "N8NRateLimit_userId_service_date_key" ON "N8NRateLimit" ("userId", "service", "date");
 
--- CreateIndex: N8NRateLimit.resetAt
-CREATE INDEX "N8NRateLimit_resetAt_idx" ON "N8NRateLimit" ("resetAt");
+-- CreateIndex: N8NRateLimit.userId
+CREATE INDEX "N8NRateLimit_userId_idx" ON "N8NRateLimit" ("userId");
+
+-- CreateIndex: N8NRateLimit.date
+CREATE INDEX "N8NRateLimit_date_idx" ON "N8NRateLimit" ("date");
+
+-- CreateIndex: Conversation.channelUserId_channel_status
+CREATE UNIQUE INDEX "Conversation_channelUserId_channel_status_key" ON "Conversation" ("channelUserId", "channel", "status");
+
+-- CreateIndex: Conversation.userId
+CREATE INDEX "Conversation_userId_idx" ON "Conversation" ("userId");
+
+-- CreateIndex: Conversation.status_lastMessageAt
+CREATE INDEX "Conversation_status_lastMessageAt_idx" ON "Conversation" ("status", "lastMessageAt");
+
+-- CreateIndex: ConversationMessage.conversationId_createdAt
+CREATE INDEX "ConversationMessage_conversationId_createdAt_idx" ON "ConversationMessage" ("conversationId", "createdAt");
+
+-- CreateIndex: ConversationMessage.sender
+CREATE INDEX "ConversationMessage_sender_idx" ON "ConversationMessage" ("sender");
+
+-- CreateIndex: ConversationAIResponse.conversationId_createdAt
+CREATE INDEX "ConversationAIResponse_conversationId_createdAt_idx" ON "ConversationAIResponse" ("conversationId", "createdAt");
+
+-- CreateIndex: ConversationAIResponse.status
+CREATE INDEX "ConversationAIResponse_status_idx" ON "ConversationAIResponse" ("status");
 
 -- AddForeignKey: UserIdentity.userId
 ALTER TABLE "UserIdentity" ADD CONSTRAINT "UserIdentity_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -217,3 +309,9 @@ ALTER TABLE "NameHistory" ADD CONSTRAINT "NameHistory_userId_fkey" FOREIGN KEY (
 
 -- AddForeignKey: AIResponseChunk.aiResponseId
 ALTER TABLE "AIResponseChunk" ADD CONSTRAINT "AIResponseChunk_aiResponseId_fkey" FOREIGN KEY ("aiResponseId") REFERENCES "AIResponse"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey: ConversationMessage.conversationId
+ALTER TABLE "ConversationMessage" ADD CONSTRAINT "ConversationMessage_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "Conversation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey: ConversationAIResponse.conversationId
+ALTER TABLE "ConversationAIResponse" ADD CONSTRAINT "ConversationAIResponse_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "Conversation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
