@@ -144,54 +144,8 @@ export class InstagramListener implements OnModuleInit {
         `📨 Instagram message from ${senderId}${isEcho ? ' (echo)' : ''}${isSelf ? ' (self)' : ''}`
       );
 
-      // Save incoming message to conversation
-      try {
-        const conversation = await this.prisma.conversation.findFirst({
-          where: {
-            channelUserId: senderId,
-            channel: 'instagram',
-            status: 'ACTIVE',
-          },
-        });
-
-        if (conversation) {
-          await this.prisma.conversationMessage.create({
-            data: {
-              conversationId: conversation.id,
-              sender: 'USER',
-              content: messageText,
-              mediaUrl: null,
-              externalId: messageId,
-              metadata: {
-                igsid: senderId,
-                isEcho,
-                isSelf,
-              },
-            },
-          });
-
-          // Update conversation counters
-          await this.prisma.conversation.update({
-            where: { id: conversation.id },
-            data: {
-              messageCount: { increment: 1 },
-              lastMessageAt: new Date(),
-            },
-          });
-
-          this.logger.debug(
-            `✅ ConversationMessage saved for conversation ${conversation.id}`,
-          );
-        } else {
-          this.logger.warn(
-            `No ACTIVE conversation found for senderId ${senderId}. Message not saved to conversation.`,
-          );
-        }
-      } catch (error) {
-        this.logger.error(
-          `Failed to save ConversationMessage: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+      // ✅ NOTE: ConversationListener handles saving the first incoming message
+      // No need to save here - avoids duplicate saves and ensures proper ordering
 
        // 📌 PASO 1: Consultar perfil del usuario (con caché en BD)
       const profile = await this.instagram.getUserProfileWithCache(senderId);
