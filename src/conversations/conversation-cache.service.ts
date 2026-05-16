@@ -1,90 +1,97 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 
 /**
- * In-memory cache for conversation data
- * Stores conversations by channelUserId for fast lookup
- * Cache is lost on service restart (acceptable for this use case)
- * 
- * NOTE: This implementation is NOT thread-safe. However, it's safe in Node.js
- * because JavaScript is single-threaded and Map operations are atomic enough
- * for the use case. If converting to a multi-threaded runtime, add locking.
+ * Bounded LRU + TTL cache for active conversations.
+ *
+ * Previous impl was an unbounded `Map<string, CachedConversation>` → memory
+ * grew with every new user and never shrank. With ~100k users that's MBs of
+ * stale data pinned forever.
+ *
+ * Now:
+ *   - Max entries: `CONVERSATION_CACHE_MAX_SIZE` (default 5000) — oldest evicted
+ *   - TTL: `CONVERSATION_CACHE_TTL_MS` (default 1h) — entries expire on read
+ *   - LRU bump on access: hot conversations stay, cold ones get evicted
+ *
+ * Not thread-safe, but safe under Node's single-threaded event loop.
  */
 export interface CachedConversation {
-  id: string;
-  channelUserId: string;
-  topic: string | null;
-  aiEnabled: boolean;
-  agentAssigned: string | null;
-  userId: string | null;
-  status: string;
+  id: string
+  channelUserId: string
+  topic: string | null
+  aiEnabled: boolean
+  agentAssigned: string | null
+  userId: string | null
+  status: string
+}
+
+interface CacheEntry {
+  value: CachedConversation
+  expiresAt: number
 }
 
 @Injectable()
-export class ConversationCacheService {
-  private readonly logger = new Logger(ConversationCacheService.name);
-  private cache = new Map<string, CachedConversation>();
+export class ConversationCacheService implements OnModuleInit {
+  private readonly logger = new Logger(ConversationCacheService.name)
+  private cache = new Map<string, CacheEntry>()
+  private maxSize!: number
+  private ttlMs!: number
 
-  /**
-   * Store conversation in cache
-   * Key: channelUserId (e.g., Instagram user ID)
-   */
+  constructor(private readonly config: ConfigService) {}
+
+  onModuleInit(): void {
+    this.maxSize = Number(this.config.get<string>('CONVERSATION_CACHE_MAX_SIZE') ?? 5000)
+    this.ttlMs = Number(this.config.get<string>('CONVERSATION_CACHE_TTL_MS') ?? 60 * 60 * 1000)
+    this.logger.log(`ConversationCache ready — maxSize=${this.maxSize} ttlMs=${this.ttlMs}`)
+  }
+
   set(channelUserId: string, data: CachedConversation): void {
-    this.cache.set(channelUserId, data);
-    this.logger.debug(`Cached conversation for user ${channelUserId}`);
+    // Evict if full (and we're inserting a new key).
+    if (!this.cache.has(channelUserId) && this.cache.size >= this.maxSize) {
+      const oldestKey = this.cache.keys().next().value
+      if (oldestKey !== undefined) {
+        this.cache.delete(oldestKey)
+      }
+    }
+    // Delete + re-insert to bump to the most-recent position.
+    this.cache.delete(channelUserId)
+    this.cache.set(channelUserId, { value: data, expiresAt: Date.now() + this.ttlMs })
   }
 
-  /**
-   * Retrieve conversation from cache
-   */
   get(channelUserId: string): CachedConversation | undefined {
-    return this.cache.get(channelUserId);
+    const entry = this.cache.get(channelUserId)
+    if (!entry) return undefined
+    if (entry.expiresAt < Date.now()) {
+      this.cache.delete(channelUserId)
+      return undefined
+    }
+    // LRU bump
+    this.cache.delete(channelUserId)
+    this.cache.set(channelUserId, entry)
+    return entry.value
   }
 
-  /**
-   * Check if conversation exists in cache
-   */
   has(channelUserId: string): boolean {
-    return this.cache.has(channelUserId);
+    return this.get(channelUserId) !== undefined
   }
 
-  /**
-   * Update existing conversation in cache
-   */
   update(channelUserId: string, updates: Partial<CachedConversation>): void {
-    const existing = this.cache.get(channelUserId);
-    if (existing) {
-      this.cache.set(channelUserId, {...existing, ...updates});
-      this.logger.debug(`Updated cached conversation for user ${channelUserId}`);
+    const current = this.get(channelUserId)
+    if (current) {
+      this.set(channelUserId, { ...current, ...updates })
     }
   }
 
-  /**
-   * Remove conversation from cache
-   */
   delete(channelUserId: string): void {
-    this.cache.delete(channelUserId);
-    this.logger.debug(`Deleted cached conversation for user ${channelUserId}`);
+    this.cache.delete(channelUserId)
   }
 
-  /**
-   * Get all cached conversations (for debugging)
-   */
-  getAll(): CachedConversation[] {
-    return Array.from(this.cache.values());
-  }
-
-  /**
-   * Get cache size
-   */
   size(): number {
-    return this.cache.size;
+    return this.cache.size
   }
 
-  /**
-   * Clear entire cache
-   */
   clear(): void {
-    this.cache.clear();
-    this.logger.log('Cleared all cached conversations');
+    this.cache.clear()
+    this.logger.log('Conversation cache cleared')
   }
 }

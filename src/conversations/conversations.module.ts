@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from '../prisma/prisma.module';
 import { RabbitMQModule } from '../rabbitmq/rabbitmq.module';
 import { ConversationListener } from './conversation.listener';
@@ -6,7 +7,7 @@ import { ConversationCacheService } from './conversation-cache.service';
 import { TopicDetectionService } from './topic-detection.service';
 
 @Module({
-  imports: [PrismaModule, RabbitMQModule],
+  imports: [ConfigModule, PrismaModule, RabbitMQModule],
   providers: [
     ConversationListener,
     ConversationCacheService,

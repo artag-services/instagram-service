@@ -7,6 +7,10 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
   app.useGlobalFilters(new HttpExceptionFilter());
+
+  // Graceful shutdown: closes RabbitMQ connections, Prisma client, etc. on SIGTERM/SIGINT
+  app.enableShutdownHooks();
+
   const port = process.env.PORT ?? 3004;
   await app.listen(port);
   console.log(`Instagram service running on port ${port}`);
