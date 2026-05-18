@@ -5,6 +5,7 @@ import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
 import { InstagramModule } from './instagram/instagram.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { WebhookModule } from './webhook/webhook.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { WebhookModule } from './webhook/webhook.module';
     InstagramModule,
     ConversationsModule,
     WebhookModule,
+    AdminModule,
   ],
 })
 export class AppModule {}
