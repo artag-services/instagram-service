@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { RabbitSubscribe } from '@golevelup/nestjs-rabbitmq';
+import { Conversation } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TopicDetectionService } from './topic-detection.service';
 import { ConversationCacheService, CachedConversation } from './conversation-cache.service';
@@ -15,6 +16,15 @@ interface ConversationIncomingPayload {
   mediaUrl?: string;
   mediaType?: string;
 }
+
+/**
+ * Routing keys for the CQRS read model (consumed by sync-service).
+ * Rule: emit AFTER Postgres writes commit. Source of truth lives here.
+ */
+const DATA_EVENTS = {
+  CONVERSATION_CREATED: 'data.instagram.conversation.created',
+  MESSAGE_RECEIVED: 'data.instagram.message.received',
+} as const;
 
 /**
  * Listens for conversation.incoming events from the Gateway
@@ -69,7 +79,12 @@ export class ConversationListener {
       const topic = this.topicDetection.detectTopic(messageText);
       const keywords = this.topicDetection.extractKeywords(messageText, topic);
 
-      // ✅ TAREA 5: Use upsert to avoid duplicate conversations
+      // ✅ Upsert to dedupe conversations. Prisma doesn't tell us whether
+      // the row was created or just updated, so we exploit:
+      //   on INSERT  → createdAt === updatedAt (same timestamp in one stmt)
+      //   on UPDATE  → updatedAt > createdAt
+      // This drives the wasCreated flag so we only fire
+      // data.instagram.conversation.created once per conversation.
       const conversation = await this.prisma.conversation.upsert({
         where: {
           channelUserId_channel_status: {
@@ -79,14 +94,12 @@ export class ConversationListener {
           },
         },
         update: {
-          // If conversation exists, just update counters and timestamp
           messageCount: { increment: 1 },
           lastMessageAt: messageTimestamp,
           updatedAt: new Date(),
         },
         create: {
-          // If conversation doesn't exist, create it
-          userId: null, // Will be updated when Identity resolves
+          userId: null, // Will be backfilled when Identity resolves.
           channelUserId,
           channel,
           topic,
@@ -94,17 +107,18 @@ export class ConversationListener {
           keywords,
           aiEnabled: true,
           status: 'ACTIVE',
-          messageCount: 1, // Count the first message
+          messageCount: 1,
           aiMessageCount: 0,
           lastMessageAt: messageTimestamp,
         },
       });
-
+      const wasCreated = conversation.createdAt.getTime() === conversation.updatedAt.getTime();
       this.logger.log(
-        `✅ Conversation ${conversation.id ? 'created' : 'updated'}: ${conversation.id} | Topic: ${topic}`
+        `✅ Conversation ${wasCreated ? 'created' : 'updated'}: ${conversation.id} | Topic: ${topic}`,
       );
 
-      // ✅ TAREA 1 & 3: Save the incoming message to ConversationMessage
+      // ✅ Save the incoming message to ConversationMessage
+      let messageSaved = false;
       try {
         await this.prisma.conversationMessage.create({
           data: {
@@ -120,15 +134,16 @@ export class ConversationListener {
             },
           },
         });
-
+        messageSaved = true;
         this.logger.debug(
-          `✅ ConversationMessage saved for conversation ${conversation.id} | mediaUrl: ${mediaUrl || 'none'}`
+          `✅ ConversationMessage saved for conversation ${conversation.id} | mediaUrl: ${mediaUrl || 'none'}`,
         );
       } catch (msgError) {
         this.logger.error(
-          `Failed to save ConversationMessage: ${msgError instanceof Error ? msgError.message : msgError}`
+          `Failed to save ConversationMessage: ${msgError instanceof Error ? msgError.message : msgError}`,
         );
-        // Don't throw - conversation was created, only message failed
+        // Don't throw — conversation row is fine. We still publish the
+        // conversation snapshot but skip message.received because no row exists.
       }
 
       // 2. Update in-memory cache
@@ -143,21 +158,39 @@ export class ConversationListener {
       };
       this.cache.set(channelUserId, cachedConv);
 
-      // 3. Publish conversation.created event for other services
-      await this.rabbitmq.publish(ROUTING_KEYS.CONVERSATION_CREATED, {
-        conversationId: conversation.id,
-        channel,
-        channelUserId,
-        topic,
-        aiEnabled: true,
-        messageId,
-        timestamp: messageTimestamp.toISOString(),
-        createdAt: conversation.createdAt.toISOString(),
-      } as unknown as Record<string, unknown>);
+      // 3. Legacy in-channel `channels.conversation.created` — kept for
+      //    back-compat with other consumers (not for sync-service).
+      if (wasCreated) {
+        await this.rabbitmq.publish(ROUTING_KEYS.CONVERSATION_CREATED, {
+          conversationId: conversation.id,
+          channel,
+          channelUserId,
+          topic,
+          aiEnabled: true,
+          messageId,
+          timestamp: messageTimestamp.toISOString(),
+          createdAt: conversation.createdAt.toISOString(),
+        } as unknown as Record<string, unknown>);
+        this.logger.log(`✅ Published channels.conversation.created: ${conversation.id}`);
+      }
 
-      this.logger.log(
-        `✅ Published conversation.created event: ${conversation.id}`
-      );
+      // 4. CQRS data.* events for sync-service.
+      //    Fires AFTER Postgres has committed. Conversation snapshot only on
+      //    actual creation; message.received only if the row persisted.
+      if (wasCreated) {
+        await this.publishConversationSnapshot(conversation);
+      }
+      if (messageSaved) {
+        await this.publishMessageReceived({
+          messageId,
+          channelUserId,
+          conversationId: conversation.id,
+          content: messageText,
+          mediaUrl: mediaUrl ?? null,
+          userId: conversation.userId,
+          occurredAt: messageTimestamp,
+        });
+      }
     } catch (error) {
       this.logger.error(
         'Error handling conversation incoming event:',
@@ -193,6 +226,9 @@ export class ConversationListener {
       if (updated.channelUserId) {
         this.cache.update(updated.channelUserId, {aiEnabled});
       }
+
+      // Mirror the change into the read model.
+      await this.publishConversationSnapshot(updated);
     } catch (error) {
       this.logger.error('Error handling AI toggle event:', error);
     }
@@ -237,8 +273,61 @@ export class ConversationListener {
           status: agentAssigned ? 'WITH_AGENT' : 'ACTIVE',
         });
       }
+
+      // Mirror the change into the read model.
+      await this.publishConversationSnapshot(updated);
     } catch (error) {
       this.logger.error('Error handling agent assign event:', error);
     }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // CQRS publishers — every method here runs AFTER Postgres has committed.
+  // Payloads are built from the persisted row, not from the inbound DTO,
+  // so sync-service always sees the final state.
+  // ──────────────────────────────────────────────────────────────────────
+
+  /**
+   * Emit a conversation snapshot. Reused on creation, AI toggle, and agent
+   * assignment. Sync's projector upserts so replaying is safe.
+   *
+   * Routing key stays `data.instagram.conversation.created` for back-compat;
+   * the projector treats it as "the current state of this conversation."
+   */
+  private async publishConversationSnapshot(conversation: Conversation): Promise<void> {
+    await this.rabbitmq.publish(DATA_EVENTS.CONVERSATION_CREATED, {
+      conversationId: conversation.id,
+      channel: 'instagram',
+      channelUserId: conversation.channelUserId,
+      topic: conversation.topic ?? null,
+      userId: conversation.userId ?? null,
+      status: conversation.status,
+      aiEnabled: conversation.aiEnabled,
+      agentAssigned: conversation.agentAssigned ?? null,
+      createdAt: conversation.createdAt.toISOString(),
+    } as unknown as Record<string, unknown>);
+  }
+
+  /** Emit a user-sent message. Always paired with a saved ConversationMessage. */
+  private async publishMessageReceived(args: {
+    messageId: string;
+    channelUserId: string;
+    conversationId: string;
+    content: string;
+    mediaUrl: string | null;
+    userId: string | null;
+    occurredAt: Date;
+  }): Promise<void> {
+    await this.rabbitmq.publish(DATA_EVENTS.MESSAGE_RECEIVED, {
+      messageId: args.messageId,
+      senderId: args.channelUserId,
+      channelUserId: args.channelUserId,
+      conversationId: args.conversationId,
+      content: args.content,
+      mediaUrl: args.mediaUrl,
+      userId: args.userId,
+      channel: 'instagram',
+      timestamp: args.occurredAt.toISOString(),
+    } as unknown as Record<string, unknown>);
   }
 }
