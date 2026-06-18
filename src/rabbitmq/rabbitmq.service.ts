@@ -3,6 +3,13 @@ import { ConfigService } from '@nestjs/config';
 import * as amqp from 'amqplib';
 import { RABBITMQ_EXCHANGE } from './constants/queues';
 
+export interface AssertQueueOptions {
+  durable: boolean
+  messageTtl?: number
+  deadLetterExchange?: string
+  deadLetterRoutingKey?: string
+}
+
 @Injectable()
 export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RabbitMQService.name);
@@ -56,13 +63,33 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     this.logger.debug(`Published ? [${routingKey}]`);
   }
 
+  async assertQueue(
+    queue: string,
+    routingKey: string,
+    options?: AssertQueueOptions,
+  ): Promise<void> {
+    if (!this.channel) throw new Error('RabbitMQ channel not available');
+    const args: Record<string, unknown> = {};
+    if (options?.messageTtl) args['x-message-ttl'] = options.messageTtl;
+    if (options?.deadLetterExchange) args['x-dead-letter-exchange'] = options.deadLetterExchange;
+    if (options?.deadLetterRoutingKey) args['x-dead-letter-routing-key'] = options.deadLetterRoutingKey;
+    await this.channel.assertQueue(queue, { durable: options?.durable ?? true, arguments: args });
+    await this.channel.bindQueue(queue, RABBITMQ_EXCHANGE, routingKey);
+    this.logger.log(`Queue asserted [${queue}] → [${routingKey}]`);
+  }
+
   async subscribe(
     queue: string,
     routingKey: string,
     handler: (payload: Record<string, unknown>) => Promise<void>,
+    options?: AssertQueueOptions,
   ): Promise<void> {
     if (!this.channel) throw new Error('RabbitMQ channel not available');
-    await this.channel.assertQueue(queue, { durable: true });
+    const args: Record<string, unknown> = {};
+    if (options?.messageTtl) args['x-message-ttl'] = options.messageTtl;
+    if (options?.deadLetterExchange) args['x-dead-letter-exchange'] = options.deadLetterExchange;
+    if (options?.deadLetterRoutingKey) args['x-dead-letter-routing-key'] = options.deadLetterRoutingKey;
+    await this.channel.assertQueue(queue, { durable: options?.durable ?? true, arguments: args });
     await this.channel.bindQueue(queue, RABBITMQ_EXCHANGE, routingKey);
     this.channel.prefetch(1);
     await this.channel.consume(queue, async (msg) => {

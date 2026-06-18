@@ -16,6 +16,10 @@ export const ROUTING_KEYS = {
   INSTAGRAM_OPTIN_RECEIVED: 'channels.instagram.events.optin',
   INSTAGRAM_HANDOVER_RECEIVED: 'channels.instagram.events.handover',
 
+  // AI Retry (TTL+DLX)
+  INSTAGRAM_AI_RETRY: 'channels.instagram.ai-retry',
+  INSTAGRAM_AI_RETRY_DELAY: 'channels.instagram.ai-retry-delay',
+
   // Conversation Rooms System
   CONVERSATION_INCOMING: 'channels.conversation.incoming',
   CONVERSATION_CREATED: 'channels.conversation.created',
@@ -39,6 +43,10 @@ export const QUEUES = {
   INSTAGRAM_AI_RESPONSE: 'instagram.ai-response',
   INSTAGRAM_AI_RESPONSE_CHUNK_FAILED: 'instagram.ai-response-chunk-failed',
   INSTAGRAM_AI_RESPONSE_DLQ: 'instagram.ai-response-dlq',
+
+  // AI Retry Queues
+  INSTAGRAM_AI_RETRY: 'instagram.ai.retry',
+  INSTAGRAM_AI_RETRY_DELAY: 'instagram.ai.retry.delay',
 
   // Conversation Queues
   CONVERSATION_INCOMING: 'instagram.conversation.incoming',

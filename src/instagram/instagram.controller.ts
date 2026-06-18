@@ -1,5 +1,7 @@
 import { Controller, Get, Post, Param, Body } from '@nestjs/common';
-import { InstagramService } from './instagram.service';
+import { v4 as uuidv4 } from 'uuid';
+import { SendMessageUseCase } from '../domain/services/send-message.usecase';
+import { MetaGraphClient } from './clients/meta-graph.client';
 
 interface ConversationWithUser {
   conversationId: string;
@@ -9,17 +11,17 @@ interface ConversationWithUser {
 
 @Controller('conversations')
 export class InstagramController {
-  constructor(private readonly instagram: InstagramService) {}
+  constructor(private readonly meta: MetaGraphClient) {}
 
   @Get()
   async getConversations(): Promise<ConversationWithUser[]> {
-    return this.instagram.getConversations();
+    return this.meta.listConversations();
   }
 }
 
 @Controller()
 export class InstagramSendController {
-  constructor(private readonly instagram: InstagramService) {}
+  constructor(private readonly sendMessageUseCase: SendMessageUseCase) {}
 
   /**
    * Send a message to a specific Instagram user by IGSID.
@@ -32,6 +34,12 @@ export class InstagramSendController {
     @Param('igsid') igsid: string,
     @Body() body: { message: string; mediaUrl?: string },
   ): Promise<{ messageId: string; igsid: string; status: 'SENT' | 'FAILED'; timestamp: string }> {
-    return this.instagram.sendToInstagramUser(igsid, body.message, body.mediaUrl);
+    const messageId = uuidv4();
+    try {
+      await this.sendMessageUseCase.sendToOneWithId(messageId, igsid, body.message, body.mediaUrl);
+      return { messageId, igsid, status: 'SENT', timestamp: new Date().toISOString() };
+    } catch {
+      return { messageId, igsid, status: 'FAILED', timestamp: new Date().toISOString() };
+    }
   }
 }

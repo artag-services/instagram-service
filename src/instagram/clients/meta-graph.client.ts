@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config'
 import axios, { AxiosError, AxiosInstance } from 'axios'
 import * as https from 'https'
 
+import { IMetaProfileProvider, ProfileData } from '../../domain/ports/IMetaProfileProvider'
+
 import {
   MetaGraphConversationsResponse,
   MetaGraphError,
@@ -21,7 +23,7 @@ import {
  * Errors normalize to `{ reason, errorCode, detail }` via `MetaGraphException`.
  */
 @Injectable()
-export class MetaGraphClient implements OnModuleInit {
+export class MetaGraphClient implements OnModuleInit, IMetaProfileProvider {
   private readonly logger = new Logger(MetaGraphClient.name)
   private http!: AxiosInstance
   private sendUrl!: string
