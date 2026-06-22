@@ -4,10 +4,10 @@ import { RabbitMQService } from '../../rabbitmq/rabbitmq.service'
 import { ROUTING_KEYS, QUEUES, RABBITMQ_EXCHANGE } from '../../rabbitmq/constants/queues'
 import {
   SendMessageUseCase,
-  SendMessageInput,
 } from '../../domain/services/send-message.usecase'
-import { ProcessAIUseCase, AIProcessInput } from '../../domain/services/process-ai.usecase'
+import { ProcessAIUseCase } from '../../domain/services/process-ai.usecase'
 import { HandleAIResponseUseCase } from '../../domain/services/handle-ai-response.usecase'
+import { MetaGraphClient } from '../../instagram/clients/meta-graph.client'
 import { IEventPublisher } from '../../domain/ports/IEventPublisher'
 import { IProfileRepository } from '../../domain/ports/IProfileRepository'
 import { InstagramMessagingEvent } from '../../instagram/types/meta-graph.types'
@@ -24,6 +24,7 @@ export class InstagramConsumer implements OnModuleInit {
     private readonly sendMessageUseCase: SendMessageUseCase,
     private readonly processAIUseCase: ProcessAIUseCase,
     private readonly handleAIResponseUseCase: HandleAIResponseUseCase,
+    private readonly meta: MetaGraphClient,
     @Inject('IEventPublisher') private readonly eventBus: IEventPublisher,
     @Inject('IProfileRepository') private readonly profileRepo: IProfileRepository,
   ) {}
@@ -44,6 +45,12 @@ export class InstagramConsumer implements OnModuleInit {
 
     await this.rabbitmq.subscribe(QUEUES.INSTAGRAM_SEND, ROUTING_KEYS.INSTAGRAM_SEND, (p) =>
       this.handleSendMessage(p),
+    )
+    await this.rabbitmq.subscribe(QUEUES.INSTAGRAM_GET_CONVERSATIONS, ROUTING_KEYS.INSTAGRAM_GET_CONVERSATIONS, (p) =>
+      this.handleGetConversations(p),
+    )
+    await this.rabbitmq.subscribe(QUEUES.INSTAGRAM_SEND_TO_USER, ROUTING_KEYS.INSTAGRAM_SEND_TO_USER, (p) =>
+      this.handleSendToUser(p),
     )
     await this.rabbitmq.subscribe(
       QUEUES.INSTAGRAM_EVENTS_MESSAGE,
@@ -260,6 +267,46 @@ export class InstagramConsumer implements OnModuleInit {
       this.logger.error(
         `Error handling failed chunk: ${error instanceof Error ? error.message : String(error)}`,
       )
+    }
+  }
+
+  private async handleGetConversations(payload: Record<string, unknown>): Promise<void> {
+    const { correlationId } = payload as { correlationId?: string }
+
+    try {
+      const conversations = await this.meta.listConversations()
+      this.rabbitmq.publish(ROUTING_KEYS.INSTAGRAM_RESPONSE, { correlationId, conversations, success: true })
+    } catch (error) {
+      const err = error as Error
+      this.logger.error(`Error getting conversations: ${err.message}`)
+      if (correlationId) {
+        this.rabbitmq.publish(ROUTING_KEYS.INSTAGRAM_RESPONSE, {
+          correlationId, success: false, error: err.message,
+        })
+      }
+    }
+  }
+
+  private async handleSendToUser(payload: Record<string, unknown>): Promise<void> {
+    const { correlationId, igsid, message, mediaUrl } = payload as {
+      correlationId?: string; igsid: string; message: string; mediaUrl?: string
+    }
+
+    try {
+      const messageId = await this.sendMessageUseCase.sendToOneWithId(
+        `rpc-${correlationId ?? Date.now()}`, igsid, message, mediaUrl,
+      )
+      this.rabbitmq.publish(ROUTING_KEYS.INSTAGRAM_RESPONSE, {
+        correlationId, messageId, igsid, status: 'SENT', timestamp: new Date().toISOString(), success: true,
+      })
+    } catch (error) {
+      const err = error as Error
+      this.logger.error(`Error sending to Instagram user ${igsid}: ${err.message}`)
+      if (correlationId) {
+        this.rabbitmq.publish(ROUTING_KEYS.INSTAGRAM_RESPONSE, {
+          correlationId, igsid, status: 'FAILED', timestamp: new Date().toISOString(), success: false, error: err.message,
+        })
+      }
     }
   }
 

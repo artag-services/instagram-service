@@ -2,6 +2,8 @@ export const RABBITMQ_EXCHANGE = 'channels';
 
 export const ROUTING_KEYS = {
   INSTAGRAM_SEND: 'channels.instagram.send',
+  INSTAGRAM_GET_CONVERSATIONS: 'channels.instagram.get_conversations',
+  INSTAGRAM_SEND_TO_USER: 'channels.instagram.send_to_user',
   INSTAGRAM_RESPONSE: 'channels.instagram.response',
   INSTAGRAM_AI_RESPONSE: 'channels.instagram.ai-response',
   INSTAGRAM_AI_RESPONSE_CHUNK_FAILED: 'channels.instagram.ai-response-chunk-failed',
@@ -29,6 +31,8 @@ export const ROUTING_KEYS = {
 
 export const QUEUES = {
   INSTAGRAM_SEND: 'instagram.send',
+  INSTAGRAM_GET_CONVERSATIONS: 'instagram.get_conversations',
+  INSTAGRAM_SEND_TO_USER: 'instagram.send_to_user',
 
   // Instagram Events Queues
   INSTAGRAM_EVENTS_MESSAGE: 'instagram.events.message',
