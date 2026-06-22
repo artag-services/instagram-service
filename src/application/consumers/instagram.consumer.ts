@@ -7,6 +7,7 @@ import {
 } from '../../domain/services/send-message.usecase'
 import { ProcessAIUseCase } from '../../domain/services/process-ai.usecase'
 import { HandleAIResponseUseCase } from '../../domain/services/handle-ai-response.usecase'
+import { ManageConversationUseCase } from '../../domain/services/manage-conversation.usecase'
 import { MetaGraphClient } from '../../instagram/clients/meta-graph.client'
 import { IEventPublisher } from '../../domain/ports/IEventPublisher'
 import { IProfileRepository } from '../../domain/ports/IProfileRepository'
@@ -24,6 +25,7 @@ export class InstagramConsumer implements OnModuleInit {
     private readonly sendMessageUseCase: SendMessageUseCase,
     private readonly processAIUseCase: ProcessAIUseCase,
     private readonly handleAIResponseUseCase: HandleAIResponseUseCase,
+    private readonly manageConversation: ManageConversationUseCase,
     private readonly meta: MetaGraphClient,
     @Inject('IEventPublisher') private readonly eventBus: IEventPublisher,
     @Inject('IProfileRepository') private readonly profileRepo: IProfileRepository,
@@ -152,6 +154,16 @@ export class InstagramConsumer implements OnModuleInit {
 
       const profile = await this.profileRepo.getByChannelUserId(senderId, 'instagram')
       const displayName = profile.displayName || senderId
+
+      this.manageConversation.handleIncoming({
+        channel: 'instagram',
+        channelUserId: senderId,
+        messageText,
+        messageId,
+        timestamp: String(value?.timestamp ?? Math.floor(Date.now() / 1000)),
+      }).catch((err: Error) =>
+        this.logger.warn(`Conversation creation failed for ${senderId}: ${err.message}`),
+      )
 
       this.eventBus.publish(IDENTITY_RESOLVE_ROUTING_KEY, {
         channel: 'instagram',
