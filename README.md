@@ -73,7 +73,7 @@ INSTAGRAM_PORT=3004
 INSTAGRAM_DATABASE_URL=postgresql://postgres:postgres123@postgres:5432/instagram_db
 RABBITMQ_URL=...
 
-INSTAGRAM_PAGE_TOKEN=IGAA...                       # token Bearer (formato User/App)
+INSTAGRAM_ACCESS_TOKEN=IGAA...                      # token Bearer (formato User/App)
 INSTAGRAM_PAGE_ID=970925329432465
 INSTAGRAM_BUSINESS_ACCOUNT_ID=17841472713425441    # para fetch de conversaciones
 INSTAGRAM_WEBHOOK_VERIFY_TOKEN=...
@@ -84,7 +84,7 @@ INSTAGRAM_API_VERSION=v25.0
 
 - **Solo respondés**: no podés iniciar conversaciones. Meta solo te permite mandar DM a IGSIDs que te hayan escrito primero.
 - **IGSIDs son scoped por App**: el mismo humano tiene IGSIDs distintos en diferentes apps. Si cambiás de app, los IGSIDs viejos dejan de servir.
-- **Token expirable**: el `INSTAGRAM_PAGE_TOKEN` se renueva (con flow de refresh) — manejá la rotación.
+- **Token expirable**: el `INSTAGRAM_ACCESS_TOKEN` se renueva (con flow de refresh) — manejá la rotación.
 
 ## Cómo correrlo
 

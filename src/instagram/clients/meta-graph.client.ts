@@ -35,7 +35,7 @@ export class MetaGraphClient implements OnModuleInit, IMetaProfileProvider {
 
   onModuleInit(): void {
     const apiVersion = this.config.get<string>('INSTAGRAM_API_VERSION') ?? 'v21.0'
-    this.pageToken = this.config.getOrThrow<string>('INSTAGRAM_PAGE_TOKEN')
+    this.pageToken = this.config.getOrThrow<string>('INSTAGRAM_ACCESS_TOKEN')
     this.businessAccountId = this.config.get<string>('INSTAGRAM_BUSINESS_ACCOUNT_ID')
 
     const timeoutMs = Number(this.config.get<string>('INSTAGRAM_API_TIMEOUT_MS') ?? 30_000)
